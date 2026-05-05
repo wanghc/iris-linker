@@ -54,9 +54,9 @@ npm run test:coverage
 
 iris-linker/
 ├── src/
-│   ├── extension.ts          # Main extension entry point
+│   ├── extension.ts         # Main extension entry point
 │   └── CSPResourceLinkProvider.ts  # Link provider implementation
-├── out/                      # Compiled JavaScript output
+├── out/                     # Compiled JavaScript output
 ├── .vscode/
 │   ├── launch.json          # Debug configurations
 │   └── tasks.json           # Build tasks

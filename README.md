@@ -11,7 +11,7 @@ A Visual Studio Code extension that provides CSP (Content Security Policy) resou
 ## Requirements
 
 - Visual Studio Code 1.74.0 or higher
-- Node.js 16.x or higher
+- Node.js 20.20.2 or higher
 
 ## Extension Settings
 

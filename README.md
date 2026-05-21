@@ -18,10 +18,12 @@ A Visual Studio Code extension that provides CSP (Content Security Policy) resou
 This extension currently has no configurable settings.
 
 ## Usage
-
+### 一、retome csp link
 1. Open a CSP file in Visual Studio Code
 2. Resource links will be automatically detected and highlighted
 3. Click on the links to navigate to the corresponding resources
+### 二、export iris file
+1. Right-click to export iris file
 
 ## Development
 

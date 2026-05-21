@@ -1,6 +1,6 @@
 {
   "name": "iris-linker",
-  "displayName": "iris csp linker and iris tools",
+  "displayName": "iris-linker",
   "publisher": "wanghc",
   "description": "support Ctrl+click jump for Js/Css in CSP files, export file to XML",
   "version": "0.0.5",

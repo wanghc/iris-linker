@@ -3,7 +3,7 @@
   "displayName": "iris-linker",
   "publisher": "wanghc",
   "description": "support Ctrl+click jump for Js/Css in CSP files, export file to XML",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "engines": {
     "vscode": "^1.110.0"
   },
@@ -29,24 +29,39 @@
         "title": "Export File to XML"
       }
     ],
+    "configuration": {
+      "title": "IRIS Linker",
+      "properties": {
+        "iris-linker.localExport.defaultServer": {
+          "type": "string",
+          "default": "",
+          "description": "Default InterSystems server name for local file export (e.g. 'mylocal')"
+        },
+        "iris-linker.localExport.stripPrefix": {
+          "type": "string",
+          "default": "",
+          "description": "Strip this prefix from workspace-relative path when building the server document name. e.g. set 'src/' if your classes live under src/ in the workspace but not on the server"
+        }
+      }
+    },
     "menus": {
       "editor/context": [
         {
-          "when": "resourceScheme == isfs && resourceExtname=~ /\\.cls|\\.mac|\\.csp|\\.js|\\.css$/",
+          "when": "(resourceScheme == isfs || resourceScheme == file) && resourceExtname =~ /\\.cls|\\.mac|\\.int|\\.csp|\\.js|\\.css$/",
           "command": "iris-linker.exportToXML",
           "group": "1_modification"
         }
       ],
       "explorer/context": [
         {
-          "when": "resourceScheme == isfs && resourceExtname=~ /\\.cls|\\.mac|\\.csp|\\.js|\\.css$/",
+          "when": "(resourceScheme == isfs || resourceScheme == file) && resourceExtname =~ /\\.cls|\\.mac|\\.int|\\.csp|\\.js|\\.css$/",
           "command": "iris-linker.exportToXML",
           "group": "7_modification"
         }
       ],
       "editor/title/context": [
         {
-          "when": "resourceScheme == isfs && resourceExtname=~ /\\.cls|\\.mac|\\.csp|\\.js|\\.css$/",
+          "when": "(resourceScheme == isfs || resourceScheme == file) && resourceExtname =~ /\\.cls|\\.mac|\\.int|\\.csp|\\.js|\\.css$/",
           "command": "iris-linker.exportToXML",
           "group": "1_modification"
         }

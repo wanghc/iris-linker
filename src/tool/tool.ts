@@ -1,45 +1,99 @@
 // --- 辅助函数：获取服务器连接配置 ---
 import vscode, { Uri } from 'vscode';
 import axios from 'axios';
-export function getServerConfig(url:Uri) {    
-    // 获取 vscode-objectscript 的配置
-    const config = vscode.workspace.getConfiguration('intersystems'); // intersystems.servers
-    console.log(`查找${url}对应的serverConfig: ${JSON.stringify(config)}`);
-    // 获取具体的服务器定义 (在 settings.json 中定义的 "objectscript.servers" 列表)
-    const servers:{[key:string]:any}|undefined = config.get<{ [key:string]: any }>('servers');
-    console.log(`servers: ${JSON.stringify(servers)}`);
-    if (!servers) { throw new Error('无法获取 InterSystems 服务器配置');}
-    if (servers.length === 0) {throw new Error('没有配置任何服务器');}
-    const currentServerName:string = url.authority.split(':')[0];
-    let currentServer = servers[currentServerName];
-    console.log(`currentServer: ${JSON.stringify(currentServer)}`);
-    if (!currentServer.webServer) {throw new Error('无法获取当前连接信息');}
-    const scheme = currentServer.webServer.scheme ? 'https' : 'http';
-    const host = currentServer.webServer.host || 'localhost';
-    const port = currentServer.webServer.port || 52773;
+
+/** 从服务器定义构建通用的 ServerConfig 对象，overrides 可覆盖 username/password 等字段 */
+function buildServerConfig(server: any, namespace: string, overrides?: { username?: string; password?: string }) {
+    if (!server || !server.webServer) {
+        throw new Error('服务器配置缺少 webServer 信息');
+    }
+    const scheme = server.webServer.scheme ? 'https' : 'http';
+    const host = server.webServer.host || 'localhost';
+    const port = server.webServer.port || 52773;
     return {
         baseURL: `${scheme}://${host}:${port}/api/atelier`,
-        username: currentServer.username,
-        password: currentServer.password,
-        namespace: url.authority.split(':')[1] || 'User'
-        // 如果使用了 API 密钥认证，可能还需要处理其他头部，这里假设是基本认证
+        username: overrides?.username || server.username,
+        password: overrides?.password || server.password,
+        namespace: namespace || 'User'
     };
 }
+
+/** 获取所有已配置的服务器列表 */
+function getAllServers(): { [key: string]: any } {
+    const config = vscode.workspace.getConfiguration('intersystems');
+    const servers = config.get<{ [key: string]: any }>('servers');
+    if (!servers || Object.keys(servers).length === 0) {
+        throw new Error('没有配置任何 InterSystems 服务器');
+    }
+    return servers;
+}
+
+/** isfs:// 协议：从 URI authority 提取服务器名和命名空间 */
+export function getServerConfig(url: Uri) {
+    console.log(`查找${url}对应的serverConfig`);
+    const servers = getAllServers();
+    const currentServerName: string = url.authority.split(':')[0];
+    const currentServer = servers[currentServerName];
+    console.log(`currentServer: ${JSON.stringify(currentServer)}`);
+    if (!currentServer) {
+        throw new Error(`找不到服务器配置: ${currentServerName}`);
+    }
+    const namespace = url.authority.split(':')[1] || 'User';
+    return buildServerConfig(currentServer, namespace);
+}
+
+/** file:// 协议：从 objectscript.conn（.code-workspace / .vscode/settings.json）或插件配置读取默认服务器 */
+export async function getLocalServerConfig(): Promise<{ baseURL: string; username: string; password: string; namespace: string }> {
+    const servers = getAllServers();
+    const serverNames = Object.keys(servers);
+
+    // 优先级1: objectscript.conn（来自 .code-workspace 或 .vscode/settings.json，VSCode 已自动合并）
+    const objConn: any = vscode.workspace.getConfiguration('objectscript').get('conn');
+    let selectedName: string;
+    let namespace: string;
+    let overrideUser: string | undefined;
+    let overridePass: string | undefined;
+
+    if (objConn && objConn.server && servers[objConn.server]) {
+        selectedName = objConn.server;
+        namespace = objConn.ns || '';
+        // objectscript.conn 中可能直接带了凭据
+        overrideUser = objConn.username;
+        overridePass = objConn.password;
+    } else {
+        // 优先级2: iris-linker.localExport.defaultServer 配置项
+        const ourConfig = vscode.workspace.getConfiguration('iris-linker.localExport');
+        const defaultServer: string = ourConfig.get('defaultServer') || '';
+        namespace = (ourConfig.get('defaultNamespace') as string) || '';
+
+        if (defaultServer && servers[defaultServer]) {
+            selectedName = defaultServer;
+        } else if (serverNames.length === 1) {
+            selectedName = serverNames[0];
+        } else {
+            const picked = await vscode.window.showQuickPick(serverNames, {
+                placeHolder: '选择要导出的目标服务器',
+                title: 'IRIS Linker - 选择服务器'
+            });
+            if (!picked) {
+                throw new Error('用户取消了服务器选择');
+            }
+            selectedName = picked;
+        }
+    }
+
+    const server = servers[selectedName];
+    // namespace 最终兜底
+    namespace = namespace || server.namespace || 'User';
+    return buildServerConfig(server, namespace, { username: overrideUser, password: overridePass });
+}
 // --- 辅助函数：调用 XML Export API ---
-export async function exportToXMLContent(uri:Uri, serverConfig: any): Promise<string> {
+export async function exportToXMLContent(docName: string, serverConfig: any): Promise<string> {
     // InterSystems Atelier API 的 XML Export 接口
     // POST /api/atelier/v7/{ns}/action/xml/export
-    // Body: ["ClassName.cls"]    
+    // Body: ["ClassName.cls"] 或 ["/csp/user/page.csp"]
     try {
-        // 注意：这里传入的是纯文件名，
-        // 如: "websys.SensitiveProps.cls"
-        // 如："/imedical/web/scripts/websys.sensitiveprops.js"
-        let docName = uri.path;
-        if (docName.startsWith('/') && (docName.endsWith('.cls') || docName.endsWith('.mac'))){
-            docName = docName.substring(1).replaceAll('/', '.');
-        }
-        console.log(`要导出的文件名: ${ JSON.stringify(uri)}`);
-        const ns = uri.authority.split(':')[1] || 'User';
+        console.log(`要导出的文档名: ${docName}`);
         const response = await axios.post(
             `${serverConfig.baseURL}/v7/${serverConfig.namespace}/action/xml/export`,
             [docName], // 请求体是文档名数组

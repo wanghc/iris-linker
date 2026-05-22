@@ -27,6 +27,12 @@
       {
         "command": "iris-linker.exportToXML",
         "title": "Export File to XML"
+      },
+      {
+        "command": "iris-linker.syncAllToServer",
+        "title": "Sync All to IRIS Server",
+        "icon": "$(cloud-upload)",
+        "category": "IRIS Linker"
       }
     ],
     "configuration": {
@@ -41,29 +47,51 @@
           "type": "string",
           "default": "",
           "description": "Strip this prefix from workspace-relative path when building the server document name. e.g. set 'src/' if your classes live under src/ in the workspace but not on the server"
+        },
+        "iris-linker.sync.ignoreConflict": {
+          "type": "boolean",
+          "default": true,
+          "description": "Ignore server conflicts when syncing (PUT ?ignoreConflict=1)"
+        },
+        "iris-linker.sync.includeUntracked": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include untracked files in sync"
+        },
+        "iris-linker.sync.confirmBeforeSync": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show confirmation dialog before syncing"
         }
       }
     },
     "menus": {
       "editor/context": [
         {
-          "when": "(resourceScheme == isfs || resourceScheme == file) && resourceExtname =~ /\\.cls|\\.mac|\\.int|\\.csp|\\.js|\\.css$/",
+          "when": "(resourceScheme == isfs || resourceScheme == file) && resourceExtname =~ /\\.(cls|mac|int|csp|js|css|html?|png|jpe?g|gif|bmp|ico|webp|eot|otf|ttf|woff2?|pdf)$/i",
           "command": "iris-linker.exportToXML",
           "group": "1_modification"
         }
       ],
       "explorer/context": [
         {
-          "when": "(resourceScheme == isfs || resourceScheme == file) && resourceExtname =~ /\\.cls|\\.mac|\\.int|\\.csp|\\.js|\\.css$/",
+          "when": "(resourceScheme == isfs || resourceScheme == file) && resourceExtname =~ /\\.(cls|mac|int|csp|js|css|html?|png|jpe?g|gif|bmp|ico|webp|eot|otf|ttf|woff2?|pdf)$/i",
           "command": "iris-linker.exportToXML",
           "group": "7_modification"
         }
       ],
       "editor/title/context": [
         {
-          "when": "(resourceScheme == isfs || resourceScheme == file) && resourceExtname =~ /\\.cls|\\.mac|\\.int|\\.csp|\\.js|\\.css$/",
+          "when": "(resourceScheme == isfs || resourceScheme == file) && resourceExtname =~ /\\.(cls|mac|int|csp|js|css|html?|png|jpe?g|gif|bmp|ico|webp|eot|otf|ttf|woff2?|pdf)$/i",
           "command": "iris-linker.exportToXML",
           "group": "1_modification"
+        }
+      ],
+      "scm/title": [
+        {
+          "command": "iris-linker.syncAllToServer",
+          "group": "navigation",
+          "when": "scmProvider == git"
         }
       ]
     }

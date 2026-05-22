@@ -1,6 +1,8 @@
 // --- 辅助函数：获取服务器连接配置 ---
 import vscode, { Uri } from 'vscode';
 import axios from 'axios';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /** 从服务器定义构建通用的 ServerConfig 对象，overrides 可覆盖 username/password 等字段 */
 function buildServerConfig(server: any, namespace: string, overrides?: { username?: string; password?: string }) {
@@ -120,5 +122,110 @@ export async function exportToXMLContent(docName: string, serverConfig: any): Pr
     } catch (error: any) {
         console.error('API 调用失败:',error);
         throw new Error('服务器导出失败: ' + (error.response ? JSON.stringify(error.response.data) : error.message));
+    }
+}
+
+// --- 文件类型分类常量 ---
+export const FILE_CATEGORIES = {
+    // 类文件：使用点号分隔包名
+    CLASS_FILES: ['.cls', '.mac', '.int'],
+    
+    // Web 文本文件：使用路径格式，UTF-8 编码
+    WEB_TEXT_FILES: ['.csp', '.js', '.css', '.html', '.htm'],
+    
+    // 二进制文件：使用路径格式，Base64 编码
+    BINARY_FILES: [
+        '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.webp', // 图片
+        '.eot', '.otf', '.ttf', '.woff', '.woff2',               // 字体
+        '.pdf'                                                      // PDF
+    ]
+};
+
+// 所有支持的文件类型
+export const SUPPORTED_EXTENSIONS = [
+    ...FILE_CATEGORIES.CLASS_FILES,
+    ...FILE_CATEGORIES.WEB_TEXT_FILES,
+    ...FILE_CATEGORIES.BINARY_FILES
+];
+
+// --- 辅助函数：判断是否为二进制文件 ---
+export function isBinaryFile(filePath: string): boolean {
+    const ext = path.extname(filePath).toLowerCase();
+    return FILE_CATEGORIES.BINARY_FILES.includes(ext);
+}
+
+// --- 辅助函数：读取文件内容，根据类型选择编码方式 ---
+// content 必须是 string[]（Atelier API 规范）：
+//   文本文件：按行拆分，去掉末尾空行（避免 CSP 文件越存越长）
+//   二进制文件：Base64 分片，每片 24573 字节（3 的倍数，转 Base64 后 ≤32764 字节）
+export function readFileContent(filePath: string): { content: string[]; enc: boolean } {
+    if (isBinaryFile(filePath)) {
+        // 二进制文件：分块 Base64 编码（参照 vscode-objectscript base64EncodeContent）
+        const buffer = fs.readFileSync(filePath);
+        const chunkSize = 24573;
+        let start = 0;
+        const chunks: string[] = [];
+        while (start < buffer.byteLength) {
+            chunks.push(buffer.toString('base64', start, start + chunkSize));
+            start += chunkSize;
+        }
+        return { content: chunks, enc: true };
+    } else {
+        // 文本文件：按行拆分为字符串数组，去掉末尾空行
+        const text = fs.readFileSync(filePath, 'utf8');
+        const lines = text.split(/\r?\n/);
+        // 去掉末尾多余的空行（避免 CSP/JS 文件每次保存后行数增加）
+        while (lines.length > 1 && lines[lines.length - 1] === '') {
+            lines.pop();
+        }
+        return { content: lines, enc: false };
+    }
+}
+
+// --- 辅助函数：调用 Atelier API 上传文档到服务器 ---
+export async function importDocumentToServer(
+    docName: string,
+    filePath: string,
+    serverConfig: any,
+    ignoreConflict: boolean = true
+): Promise<{ success: boolean; message: string }> {
+    try {
+        // 读取文件内容（content 是 string[]）
+        const { content, enc } = readFileContent(filePath);
+        
+        // 构造请求体（与 vscode-objectscript putDoc 完全一致）
+        const payload: { enc: boolean; content: string[]; mtime: number } = {
+            enc: enc,
+            content: content,
+            mtime: -1   // -1 表示忽略冲突时间戳检查
+        };
+        
+        // 发送 PUT 请求
+        const response = await axios.put(
+            `${serverConfig.baseURL}/v7/${serverConfig.namespace}/doc/${docName}?ignoreConflict=${ignoreConflict ? 1 : 0}`,
+            payload,
+            {
+                auth: {
+                    username: serverConfig.username,
+                    password: serverConfig.password
+                },
+                headers: { 'Content-Type': 'application/json' }
+            }
+        );
+        
+        // 解析响应
+        if (response.data && response.data.status && response.data.status.errors.length === 0) {
+            return { success: true, message: `Successfully synced ${docName}` };
+        } else {
+            const errors = response.data.status.errors || [];
+            return { success: false, message: errors.map((e: any) => e.message || JSON.stringify(e)).join('; ') };
+        }
+        
+    } catch (error: any) {
+        console.error('API 调用失败:', error);
+        return {
+            success: false,
+            message: '服务器同步失败: ' + (error.response ? JSON.stringify(error.response.data) : error.message)
+        };
     }
 }

@@ -12,4 +12,5 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 **/.vscode-test.*
+.workbuddy/**
 images/gen-icon.js

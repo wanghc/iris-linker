@@ -2,8 +2,8 @@
   "name": "iris-linker",
   "displayName": "iris-linker",
   "publisher": "wanghc",
-  "description": "InterSystems IRIS 开发辅助工具：CSP 资源跳转、Atelier API 文件导出、Git 变更批量同步到 IRIS 服务器",
-  "version": "0.0.7",
+  "description": "InterSystems IRIS dev toolkit",
+  "version": "0.0.8",
   "engines": {
     "vscode": "^1.110.0"
   },

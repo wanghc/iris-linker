@@ -3,6 +3,15 @@
 > InterSystems IRIS 开发辅助工具 · VS Code 扩展  
 > InterSystems IRIS Development Assistant for VS Code
 
+[![Version](https://img.shields.io/visual-studio-marketplace/v/wanghc.iris-linker?label=version&color=1E3A5F)](https://marketplace.visualstudio.com/items?itemName=wanghc.iris-linker)
+[![Installs](https://img.shields.io/visual-studio-marketplace/i/wanghc.iris-linker?label=installs&color=1E3A5F)](https://marketplace.visualstudio.com/items?itemName=wanghc.iris-linker)
+[![Rating](https://img.shields.io/visual-studio-marketplace/r/wanghc.iris-linker?label=rating&color=1E3A5F)](https://marketplace.visualstudio.com/items?itemName=wanghc.iris-linker)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![VS Code](https://img.shields.io/badge/VS%20Code-%5E1.110.0-blue)](https://code.visualstudio.com/)
+[![Inter Systems](https://img.shields.io/badge/InterSystems-IRIS-blue.svg)](https://www.intersystems.com/products/intersystems-iris/)
+[![Inter Systems](https://img.shields.io/badge/InterSystems-Cach%c3%a9-blue.svg)](https://www.intersystems.com/products/intersystems-iris/)
+---
+
 [English](#english) | [中文](#中文)
 
 ---
@@ -66,61 +75,51 @@ code --install-extension iris-linker-0.0.7.vsix
 ```
 
 ### Development
-## Development
 
 ```bash
-# Clone the repository
-git clone <repository-url>
 # Install dependencies
 npm install
-```
 
-
-## Build
-```bash
-# Compile TypeScript
+# Compile
 npm run compile
 
 # Watch Mode
 npm run watch
-```
-## Test
 
-```bash
 # Run tests
 npm run test
-
-# Run tests with coverage
-npm run test:coverage
 ```
-## Project Structure
 
+### Project Structure
+
+```
 iris-linker/
 ├── src/
-│   ├── extension.ts         # Main extension entry point
-│   └── CSPResourceLinkProvider.ts  # Link provider implementation
-├── out/                     # Compiled JavaScript output
-├── .vscode/
-│   ├── launch.json          # Debug configurations
-│   └── tasks.json           # Build tasks
-├── package.json             # Extension manifest
-├── tsconfig.json            # TypeScript configuration
-└── README.md                # This file
-
-## Publishing
-
-```bash
-# Install vsce (VS Code Extension Manager)
-npm install -g @vscode/vsce
-
-# Package the extension
-vsce package
-
-# Publish to VS Code Marketplace
-vsce publish
+│   ├── extension.ts              # Main extension entry point
+│   ├── CSPResourceLinkProvider.ts # CSP link navigation provider
+│   └── tool/
+│       └── tool.ts               # Atelier API, Git, file utilities
+├── dist/                         # Compiled output (esbuild)
+├── images/
+│   └── icon.png                  # Extension icon
+├── package.json
+├── tsconfig.json
+├── esbuild.js                    # Build script
+└── README.md
 ```
 
-Enjoy using iris-linker! 🚀
+### Publishing
+
+```bash
+# Install vsce
+npm install -g @vscode/vsce
+
+# Package
+vsce package
+
+# Publish to Marketplace
+vsce publish
+```
 
 ### License
 
@@ -188,61 +187,50 @@ code --install-extension iris-linker-0.0.7.vsix
 
 ### 开发
 
-## Development
-
 ```bash
-# Clone the repository
-git clone <repository-url>
-# Install dependencies
+# 安装依赖
 npm install
-```
 
-
-## Build
-```bash
-# Compile TypeScript
+# 编译
 npm run compile
 
-# Watch Mode
+# 监听模式
 npm run watch
-```
-## Test
 
-```bash
-# Run tests
+# 运行测试
 npm run test
-
-# Run tests with coverage
-npm run test:coverage
 ```
-## Project Structure
 
+### 项目结构
+
+```
 iris-linker/
 ├── src/
-│   ├── extension.ts         # Main extension entry point
-│   └── CSPResourceLinkProvider.ts  # Link provider implementation
-├── out/                     # Compiled JavaScript output
-├── .vscode/
-│   ├── launch.json          # Debug configurations
-│   └── tasks.json           # Build tasks
-├── package.json             # Extension manifest
-├── tsconfig.json            # TypeScript configuration
-└── README.md                # This file
-
-## Publishing
-
-```bash
-# Install vsce (VS Code Extension Manager)
-npm install -g @vscode/vsce
-
-# Package the extension
-vsce package
-
-# Publish to VS Code Marketplace
-vsce publish
+│   ├── extension.ts              # 扩展入口
+│   ├── CSPResourceLinkProvider.ts # CSP 链接跳转
+│   └── tool/
+│       └── tool.ts               # Atelier API、Git、文件工具
+├── dist/                         # esbuild 编译输出
+├── images/
+│   └── icon.png                  # 插件图标
+├── package.json
+├── tsconfig.json
+├── esbuild.js                    # 构建脚本
+└── README.md
 ```
 
-Enjoy using iris-linker! 🚀
+### 发布
+
+```bash
+# 安装 vsce
+npm install -g @vscode/vsce
+
+# 打包
+vsce package
+
+# 发布到 Marketplace
+vsce publish
+```
 
 ### 开源协议
 

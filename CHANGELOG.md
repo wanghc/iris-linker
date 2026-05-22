@@ -2,7 +2,7 @@
 
 All notable changes to the "iris-linker" extension will be documented in this file.
 
-## [Unreleased]
+## [0.0.7]
 
 ### Added
 - 批量同步功能：在 SCM（Git）视图标题栏新增「Sync All to IRIS Server」按钮，一键将本地所有修改的 IRIS 文件同步到远程服务器

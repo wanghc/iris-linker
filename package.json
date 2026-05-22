@@ -2,11 +2,12 @@
   "name": "iris-linker",
   "displayName": "iris-linker",
   "publisher": "wanghc",
-  "description": "support Ctrl+click jump for Js/Css in CSP files, export file to XML",
-  "version": "0.0.6",
+  "description": "InterSystems IRIS 开发辅助工具：CSP 资源跳转、Atelier API 文件导出、Git 变更批量同步到 IRIS 服务器",
+  "version": "0.0.7",
   "engines": {
     "vscode": "^1.110.0"
   },
+  "icon": "images/icon.png",
   "categories": [
     "Other"
   ],

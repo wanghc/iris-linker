@@ -64,6 +64,24 @@ function getDocumentName(uri: vscode.Uri): string {
     // csp/js/css 保持路径格式（不以 / 开头的补上）
     return relative.startsWith('/') ? relative : '/' + relative;
 }
+
+/** 从 Git 相对路径直接计算 docName（不依赖 VSCode workspace folder） */
+function getDocumentNameFromGitPath(gitRelativePath: string): string {
+    let relative = gitRelativePath.replace(/\\/g, '/');
+
+    // 如果配置了 stripPrefix，去掉前面的路径前缀
+    const stripPrefix: string = vscode.workspace.getConfiguration('iris-linker.localExport').get('stripPrefix') || '';
+    if (stripPrefix && relative.startsWith(stripPrefix)) {
+        relative = relative.substring(stripPrefix.length);
+    }
+
+    const lc = relative.toLowerCase();
+    if (FILE_CATEGORIES.CLASS_FILES.some(ext => lc.endsWith(ext))) {
+        return relative.replace(/\//g, '.');
+    }
+    // csp/js/css/html 保持路径格式（不以 / 开头的补上）
+    return relative.startsWith('/') ? relative : '/' + relative;
+}
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 
@@ -112,6 +130,10 @@ function filterIRISFiles(files: string[]): string[] {
 }
 
 export function activate(context: vscode.ExtensionContext) {
+
+	// 创建 Output Channel，用于输出同步日志
+	const outputChannel = vscode.window.createOutputChannel('IRIS Linker');
+	context.subscriptions.push(outputChannel);
 
 	// Use the console to output diagnostic information (console.log) and errors (console.error)
 	// This line of code will only be executed once when your extension is activated
@@ -171,8 +193,8 @@ export function activate(context: vscode.ExtensionContext) {
                 if (uri.scheme === 'isfs') {
                     serverConfig = getServerConfig(uri);
                 } else {
-                    // file:// 本地文件
-                    serverConfig = await getLocalServerConfig();
+                    // file:// 本地文件（传入文件 uri 确保 objectscript.conn 读取正确的作用域）
+                    serverConfig = await getLocalServerConfig(undefined, uri);
                 }
                 console.log(`serverConfig namespace: ${serverConfig.namespace}`);
 
@@ -203,6 +225,8 @@ export function activate(context: vscode.ExtensionContext) {
     // 3. 注册批量同步命令
     const syncCommand = vscode.commands.registerCommand('iris-linker.syncAllToServer', async () => {
         console.log('iris-linker syncAllToServer');
+        outputChannel.appendLine('=== 同步开始 ===');
+        outputChannel.show(true); // 显示 Output 面板但不抢焦点
 
         try {
             // 获取工作区根目录
@@ -215,14 +239,15 @@ export function activate(context: vscode.ExtensionContext) {
             let gitRoot: string;
             try {
                 gitRoot = getGitRoot(wsFolder.uri.fsPath);
-                console.log(`Git root: ${gitRoot}`);
+                outputChannel.appendLine(`Git root: ${gitRoot}`);
             } catch {
                 throw new Error('当前工作区不是 Git 仓库');
             }
 
             // 获取修改文件列表（路径相对于 Git 根目录）
             const allChangedFiles = getGitChangedFiles(gitRoot);
-            console.log(`Git changed files: ${allChangedFiles.length}`);
+            outputChannel.appendLine(`Git changed files (all): ${allChangedFiles.length}`);
+            allChangedFiles.forEach(f => outputChannel.appendLine(`  [git] ${f}`));
 
             // 是否包含未跟踪文件
             const includeUntracked: boolean = vscode.workspace.getConfiguration('iris-linker.sync').get('includeUntracked') || false;
@@ -230,7 +255,8 @@ export function activate(context: vscode.ExtensionContext) {
 
             // 过滤 IRIS 支持的文件类型
             const irisFiles = filterIRISFiles(filesToProcess);
-            console.log(`IRIS files to sync: ${JSON.stringify(irisFiles)}`);
+            outputChannel.appendLine(`IRIS files to sync: ${irisFiles.length}`);
+            irisFiles.forEach(f => outputChannel.appendLine(`  [sync] ${f}`));
 
             if (irisFiles.length === 0) {
                 vscode.window.showInformationMessage('没有需要同步的 IRIS 文件');
@@ -247,13 +273,14 @@ export function activate(context: vscode.ExtensionContext) {
                     '同步', '取消'
                 );
                 if (choice !== '同步') {
+                    outputChannel.appendLine('用户取消了同步');
                     return;
                 }
             }
 
-            // 获取服务器配置
-            const serverConfig = await getLocalServerConfig();
-            console.log(`serverConfig namespace: ${serverConfig.namespace}`);
+            // 获取服务器配置（传入 workspaceFolder 确保 objectscript.conn 读取正确的作用域）
+            const serverConfig = await getLocalServerConfig(outputChannel, wsFolder.uri);
+            outputChannel.appendLine(`Server: ${serverConfig.baseURL}, namespace: ${serverConfig.namespace}, serverName: ${serverConfig.serverName}`);
 
             // 是否忽略冲突
             const ignoreConflict: boolean = vscode.workspace.getConfiguration('iris-linker.sync').get('ignoreConflict') !== false;
@@ -277,7 +304,8 @@ export function activate(context: vscode.ExtensionContext) {
 
                     const file = irisFiles[i];
                     const fileUri = vscode.Uri.joinPath(gitRootUri, file);
-                    const docName = getDocumentName(fileUri);
+                    // 直接从 Git 相对路径计算 docName，不依赖 getWorkspaceFolder
+                    const docName = getDocumentNameFromGitPath(file);
                     const isBinary = FILE_CATEGORIES.BINARY_FILES.includes(path.extname(file).toLowerCase());
                     const typeLabel = isBinary ? ' (binary)' : '';
 
@@ -286,9 +314,9 @@ export function activate(context: vscode.ExtensionContext) {
                         increment: 100 / total
                     });
 
-                    console.log(`Syncing [${i + 1}/${total}]: ${docName} ← ${file}`);
+                    outputChannel.appendLine(`--- [${i + 1}/${total}] ${file} → docName: ${docName} ---`);
 
-                    const result = await importDocumentToServer(docName, fileUri.fsPath, serverConfig, ignoreConflict);
+                    const result = await importDocumentToServer(docName, fileUri.fsPath, serverConfig, ignoreConflict, outputChannel);
                     if (result.success) {
                         success++;
                     } else {
@@ -299,6 +327,8 @@ export function activate(context: vscode.ExtensionContext) {
             });
 
             // 显示汇总结果
+            outputChannel.appendLine(`=== 同步完成: ${success} 成功, ${failed} 失败 ===`);
+            
             let message = `同步完成: ${success} 个成功, ${failed} 个失败`;
             if (failedFiles.length > 0) {
                 const showFailed = failedFiles.slice(0, 8);
@@ -315,7 +345,7 @@ export function activate(context: vscode.ExtensionContext) {
             }
 
         } catch (error: any) {
-            console.error('批量同步失败:', error);
+            outputChannel.appendLine(`=== 同步异常: ${error.message || error} ===`);
             vscode.window.showErrorMessage(`批量同步失败: ${error.message || error}`);
         }
     });

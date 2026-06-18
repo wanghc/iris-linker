@@ -280,10 +280,15 @@ export async function importDocumentToServer(
         const { content, enc } = readFileContent(filePath);
         
         // 构造请求体（与 vscode-objectscript putDoc 完全一致）
+        // mtime 含义：
+        //   > 0 : 服务器对比时间戳，不一致则冲突
+        //   = 0 : 不检查时间戳（等价于忽略冲突）
+        //   = -1: 同 0，但语义是"未知"
+        // 参考 vscode-objectscript importFileFromContent: mtime: 0 + ignoreConflict: true
         const payload: { enc: boolean; content: string[]; mtime: number } = {
             enc: enc,
             content: content,
-            mtime: -1   // -1 表示忽略冲突时间戳检查
+            mtime: 0   // 0 = 不做时间戳冲突检查（与 vscode-objectscript "Overwrite On Server" 行为一致）
         };
 
         // 对 docName 进行 URL 编码
@@ -309,7 +314,7 @@ export async function importDocumentToServer(
         
         outputChannel?.appendLine(`[REQUEST] PUT ${url}`);
         outputChannel?.appendLine(`[REQUEST] docName: ${docName}`);
-        outputChannel?.appendLine(`[REQUEST] enc: ${enc}, content lines: ${content.length}, mtime: -1`);
+        outputChannel?.appendLine(`[REQUEST] enc: ${enc}, content lines: ${content.length}, mtime: 0`);
         outputChannel?.appendLine(`[REQUEST] filePath: ${filePath}`);
 
         const response = await axios.put(

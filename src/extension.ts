@@ -157,10 +157,11 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(cspProvider);
 	// 2. 注册右键导出命令
     const exportCommand = vscode.commands.registerCommand('iris-linker.exportToXML', async (uri: vscode.Uri) => {
-		console.log('iris-linker exportToXML');
+        outputChannel.appendLine('=== 导出 XML 开始 ===');
+        outputChannel.show(true);
+
         // --- 处理文件 URI ---
         if (!uri) {
-            // 如果是通过命令面板触发，尝试获取当前活动文件
             const activeEditor = vscode.window.activeTextEditor;
             if (!activeEditor) {
                 vscode.window.showWarningMessage('please select a file');
@@ -168,11 +169,13 @@ export function activate(context: vscode.ExtensionContext) {
             }
             uri = activeEditor.document.uri;
         }
-        console.log(`uri: scheme=${uri.scheme}, path=${uri.path}`);
+        outputChannel.appendLine(`[EXPORT] uri: scheme=${uri.scheme}, path=${uri.path}, fsPath=${uri.fsPath}`);
 
         // 计算建议的保存文件名
         const displayName = getSuggestedFileName(uri);
         const suggestedFileName = `${displayName}.xml`;
+        outputChannel.appendLine(`[EXPORT] 建议文件名: ${suggestedFileName}`);
+
         const lastSavePath = context.globalState.get<string>(LAST_SAVE_PATH_KEY);
         let defaultUri: vscode.Uri;
         if (lastSavePath) {
@@ -185,26 +188,39 @@ export function activate(context: vscode.ExtensionContext) {
             saveLabel: 'Export',
             filters: { 'XML Files': ['xml'], 'All Files': ['*'] }
         });
-        console.dir(saveUri);
+
         if (saveUri) {
+            let docName = '';
             try {
                 // 根据协议获取服务器配置
                 let serverConfig;
                 if (uri.scheme === 'isfs') {
                     serverConfig = getServerConfig(uri);
+                    outputChannel.appendLine(`[EXPORT] 使用 isfs 协议，直接从 URI 获取配置`);
                 } else {
                     // file:// 本地文件（传入文件 uri 确保 objectscript.conn 读取正确的作用域）
-                    serverConfig = await getLocalServerConfig(undefined, uri);
+                    serverConfig = await getLocalServerConfig(outputChannel, uri);
+                    outputChannel.appendLine(`[EXPORT] 使用 file 协议，从 objectscript.conn 获取配置`);
                 }
-                console.log(`serverConfig namespace: ${serverConfig.namespace}`);
+                outputChannel.appendLine(`[EXPORT] serverConfig: baseURL=${serverConfig.baseURL}, ns=${serverConfig.namespace}, serverName=${serverConfig.serverName || '(无)'}, username=${serverConfig.username}`);
 
                 // 计算文档名并导出
-                const docName = getDocumentName(uri);
-                console.log(`正在从服务器导出文档: ${docName}, 目标: ${saveUri.fsPath}`);
+                docName = getDocumentName(uri);
+                outputChannel.appendLine(`[EXPORT] 计算出的 docName: "${docName}"`);
 
-                const xmlContent = await exportToXMLContent(docName, serverConfig);
+                const xmlContent = await exportToXMLContent(docName, serverConfig, outputChannel);
+                outputChannel.appendLine(`[EXPORT] 导出内容长度: ${xmlContent.length}`);
+
+                if (xmlContent.length === 0) {
+                    outputChannel.appendLine(`[EXPORT] ⚠ 导出内容为空！可能 docName 无效或服务器上不存在此文档`);
+                    vscode.window.showWarningMessage(`导出结果为空，请检查 IRIS Linker 输出面板中的日志`);
+                }
+
                 await vscode.workspace.fs.writeFile(saveUri, Buffer.from(xmlContent, 'utf8'));
                 await context.globalState.update(LAST_SAVE_PATH_KEY, path.dirname(saveUri.fsPath));
+                outputChannel.appendLine(`[EXPORT] 文件已保存到: ${saveUri.fsPath}`);
+                outputChannel.appendLine('=== 导出 XML 完成 ===');
+
                 const openAction = 'Open';
                 const result = await vscode.window.showInformationMessage(
                     'Exported successfully. Open folder?',
@@ -214,10 +230,22 @@ export function activate(context: vscode.ExtensionContext) {
                 if (result === openAction) {
                     await vscode.commands.executeCommand('revealFileInOS', saveUri);
                 }
-            } catch (error) {
-                console.error('导出失败:', error);
-                vscode.window.showErrorMessage(`Export failed: ${error}`);
+            } catch (error: any) {
+                outputChannel.appendLine(`[EXPORT] ✗ 导出失败: ${error.message || error}`);
+                if (error.isDeployed) {
+                    // 提取类名用于提示
+                    const match = (error.rawBody || '').match(/Class\s+'([^']+)'/i);
+                    const className = match ? match[1] : docName;
+                    vscode.window.showWarningMessage(
+                        `"${className}" 处于发布模式（Deployed Mode），无法导出。请在 IRIS 服务端重新编译该类。`,
+                        { modal: false }
+                    );
+                } else {
+                    vscode.window.showErrorMessage(`Export failed: ${error.message || error}`);
+                }
             }
+        } else {
+            outputChannel.appendLine(`[EXPORT] 用户取消了保存对话框`);
         }
     });
     context.subscriptions.push(exportCommand);

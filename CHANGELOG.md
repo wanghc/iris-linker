@@ -2,6 +2,15 @@
 
 All notable changes to the "iris-linker" extension will be documented in this file.
 
+## [0.0.10]
+
+### Added
+- 发布模式提示：导出处于 Deployed Mode 的类时，右下角弹出明确的警告提示，指引用户在 IRIS 服务端重新编译
+
+## [0.0.9]
+### Added
+- 「Sync All to IRIS Server」按钮导出增加日志
+
 ## [0.0.7]
 
 ### Added

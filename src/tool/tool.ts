@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 /** 从服务器定义构建通用的 ServerConfig 对象，overrides 可覆盖 username/password 等字段 */
-function buildServerConfig(server: any, namespace: string, overrides?: { username?: string; password?: string }) {
+function buildServerConfig(server: any, namespace: string, overrides?: { username?: string; password?: string; serverName?: string }) {
     if (!server || !server.webServer) {
         throw new Error('服务器配置缺少 webServer 信息');
     }
@@ -16,7 +16,8 @@ function buildServerConfig(server: any, namespace: string, overrides?: { usernam
         baseURL: `${scheme}://${host}:${port}/api/atelier`,
         username: overrides?.username || server.username,
         password: overrides?.password || server.password,
-        namespace: namespace || 'User'
+        namespace: namespace || 'User',
+        serverName: overrides?.serverName || ''
     };
 }
 
@@ -41,7 +42,7 @@ export function getServerConfig(url: Uri) {
         throw new Error(`找不到服务器配置: ${currentServerName}`);
     }
     const namespace = url.authority.split(':')[1] || 'User';
-    return buildServerConfig(currentServer, namespace);
+    return buildServerConfig(currentServer, namespace, { serverName: currentServerName });
 }
 
 /** file:// 协议：从 objectscript.conn（.code-workspace / .vscode/settings.json）或插件配置读取默认服务器 */
@@ -150,16 +151,15 @@ export async function getLocalServerConfig(outputChannel?: vscode.OutputChannel,
     const server = servers[selectedName];
     namespace = namespace || server.namespace || 'User';
 
-    const result = buildServerConfig(server, namespace, { username: overrideUser, password: overridePass });
-    
-    // 输出详细的服务器选择日志，方便排查连错服务器的问题
+    const result = buildServerConfig(server, namespace, { username: overrideUser, password: overridePass, serverName: selectedName });
+        // 输出详细的服务器选择日志，方便排查连错服务器的问题
     outputChannel?.appendLine(`[CONFIG] connSource: ${connSource}`);
     outputChannel?.appendLine(`[CONFIG] selected server name = "${selectedName}"`);
     outputChannel?.appendLine(`[CONFIG] server.webServer = ${JSON.stringify(server?.webServer)}`);
     outputChannel?.appendLine(`[CONFIG] resolved baseURL = ${result.baseURL}`);
     outputChannel?.appendLine(`[CONFIG] namespace = ${result.namespace}`);
 
-    return { ...result, serverName: selectedName };
+    return result;
 }
 
 /** 手动选择服务器 */
@@ -175,14 +175,19 @@ async function pickServerManually(serverNames: string[], outputChannel?: vscode.
     return picked;
 }
 // --- 辅助函数：调用 XML Export API ---
-export async function exportToXMLContent(docName: string, serverConfig: any): Promise<string> {
+export async function exportToXMLContent(docName: string, serverConfig: any, outputChannel?: vscode.OutputChannel): Promise<string> {
     // InterSystems Atelier API 的 XML Export 接口
     // POST /api/atelier/v7/{ns}/action/xml/export
     // Body: ["ClassName.cls"] 或 ["/csp/user/page.csp"]
     try {
-        console.log(`要导出的文档名: ${docName}`);
+        const apiUrl = `${serverConfig.baseURL}/v7/${serverConfig.namespace}/action/xml/export`;
+        outputChannel?.appendLine(`[EXPORT] docName: ${docName}`);
+        outputChannel?.appendLine(`[EXPORT] API URL: ${apiUrl}`);
+        outputChannel?.appendLine(`[EXPORT] username: ${serverConfig.username}`);
+        outputChannel?.appendLine(`[EXPORT] namespace: ${serverConfig.namespace}`);
+
         const response = await axios.post(
-            `${serverConfig.baseURL}/v7/${serverConfig.namespace}/action/xml/export`,
+            apiUrl,
             [docName], // 请求体是文档名数组
             {
                 auth: {
@@ -194,19 +199,58 @@ export async function exportToXMLContent(docName: string, serverConfig: any): Pr
                 }
             }
         );
+
+        // 输出完整响应结构，便于排查"导出为空"
+        outputChannel?.appendLine(`[EXPORT] response.status: ${response.status}`);
+        outputChannel?.appendLine(`[EXPORT] response.data keys: ${JSON.stringify(Object.keys(response.data || {}))}`);
+        outputChannel?.appendLine(`[EXPORT] response.data.status: ${JSON.stringify(response.data?.status)}`);
+        outputChannel?.appendLine(`[EXPORT] response.data.result keys: ${JSON.stringify(Object.keys(response.data?.result || {}))}`);
+        outputChannel?.appendLine(`[EXPORT] result.content type: ${typeof response.data?.result?.content}, isArray: ${Array.isArray(response.data?.result?.content)}`);
+        if (Array.isArray(response.data?.result?.content)) {
+            outputChannel?.appendLine(`[EXPORT] result.content length: ${response.data.result.content.length}`);
+            // 输出前几行预览，避免超大日志
+            const preview = response.data.result.content.slice(0, 5);
+            outputChannel?.appendLine(`[EXPORT] result.content preview (前5行): ${JSON.stringify(preview)}`);
+        } else if (response.data?.result?.content) {
+            const strContent = String(response.data.result.content);
+            outputChannel?.appendLine(`[EXPORT] result.content length: ${strContent.length}`);
+            outputChannel?.appendLine(`[EXPORT] result.content preview (前200字): ${strContent.substring(0, 200)}`);
+        } else {
+            outputChannel?.appendLine(`[EXPORT] result.content 为空或不存在！`);
+            outputChannel?.appendLine(`[EXPORT] 完整 response.data: ${JSON.stringify(response.data).substring(0, 500)}`);
+        }
+
         // 检查响应状态
         if (response.data && response.data.result && response.data.result.content) {
             // API 返回的内容通常在 result.content 数组中，或者是字符串
-            // 根据官方插件源码，这里通常是一个包含 XML 字符串的数组，或者直接是字符串
             const content = response.data.result.content;
-            return Array.isArray(content) ? content.join('\n') : content;
+            const xmlStr = Array.isArray(content) ? content.join('\n') : String(content);
+            outputChannel?.appendLine(`[EXPORT] 最终导出字符串长度: ${xmlStr.length}`);
+            if (xmlStr.length === 0) {
+                outputChannel?.appendLine(`[EXPORT] ⚠ 导出内容为空字符串！`);
+            }
+            return xmlStr;
         } else {
-            throw new Error('API 返回格式异常: ' + JSON.stringify(response.data));
+            const errMsg = 'API 返回格式异常，result.content 不存在';
+            outputChannel?.appendLine(`[EXPORT] ✗ ${errMsg}`);
+            outputChannel?.appendLine(`[EXPORT] 完整 response.data: ${JSON.stringify(response.data).substring(0, 500)}`);
+            throw new Error(errMsg + ': ' + JSON.stringify(response.data));
         }
 
     } catch (error: any) {
-        console.error('API 调用失败:',error);
-        throw new Error('服务器导出失败: ' + (error.response ? JSON.stringify(error.response.data) : error.message));
+        outputChannel?.appendLine(`[EXPORT] ✗ API 调用失败: ${error.message}`);
+        if (error.response) {
+            outputChannel?.appendLine(`[EXPORT] error.response.status: ${error.response.status}`);
+            outputChannel?.appendLine(`[EXPORT] error.response.data: ${JSON.stringify(error.response.data).substring(0, 500)}`);
+        }
+        const rawBody = error.response?.data
+            ? (typeof error.response.data === 'string' ? error.response.data : JSON.stringify(error.response.data))
+            : '';
+        const isDeployed = /deployed\s*mode/i.test(rawBody);
+        const err = new Error('服务器导出失败: ' + (rawBody || error.message));
+        (err as any).isDeployed = isDeployed;
+        (err as any).rawBody = rawBody;
+        throw err;
     }
 }
 

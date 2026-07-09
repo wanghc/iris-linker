@@ -24,7 +24,8 @@
 - In `.csp` files, `Ctrl+Click` on `<script src="...">` and `<link href="...">` references to jump directly to the target JS/CSS files.
 
 **2. Right-click Export to XML**
-- Right-click any supported file in the editor, file explorer, or tab title.
+- Right-click any supported file in the editor, file explorer, tab title, or the Git (SCM) view.
+- Right-click the **Staged Changes** or **Changes** group header in the Git view to batch-export **all** IRIS files in that group to a chosen directory (one `.xml` per file, with a progress bar and success/failure summary; untracked files are included in the Changes group).
 - Exports the server-side XML content of IRIS documents via the **Atelier API** (`GET /api/atelier/v7/{ns}/action/xml/export/{docName}`).
 - Works with both `isfs://` (remote) and `file://` (local workspace) protocols.
 - Supports: `.cls` `.mac` `.int` `.csp` `.js` `.css` `.html` `.png` `.jpg` `.gif` `.bmp` `.ico` `.webp` `.eot` `.otf` `.ttf` `.woff` `.woff2` `.pdf`
@@ -69,7 +70,7 @@ For `file://` workspaces, configure your IRIS connection in `.vscode/settings.js
 
 ```bash
 # From VSIX
-code --install-extension iris-linker-0.0.7.vsix
+code --install-extension iris-linker-0.0.11.vsix
 
 # Or via VS Code: Extensions → ... → Install from VSIX
 ```
@@ -135,7 +136,8 @@ MIT
 - 在 `.csp` 文件中，`Ctrl+点击` `<script src="...">` 和 `<link href="...">` 引用，直接跳转到目标 JS/CSS 文件。
 
 **2. 右键导出到 XML**
-- 在编辑器/资源管理器/标签页标题/Git面板增加[Export IRIS File to XML]右键。
+- 在编辑器/资源管理器/标签页标题/Git 面板文件右键均可使用「Export IRIS File to XML」。
+- 在 Git 面板中右键 **Staged Changes** 或 **Changes（未暂存）** 组标题，可一键将该组内**全部** IRIS 文件批量导出到所选目录（每个文件生成独立 `.xml`，带进度条并汇总成功/失败数；Changes 组含未跟踪文件）。
 - 通过 **Atelier API** (`GET /api/atelier/v7/{ns}/action/xml/export/{docName}`) 导出 IRIS 服务端文档的 XML 内容。
 - 同时支持 `isfs://`（远程连接）和 `file://`（本地工作区）两种协议。
 - 支持文件类型：`.cls` `.mac` `.int` `.csp` `.js` `.css` `.html` `.png` `.jpg` `.gif` `.bmp` `.ico` `.webp` `.eot` `.otf` `.ttf` `.woff` `.woff2` `.pdf`
@@ -180,7 +182,7 @@ MIT
 
 ```bash
 # 通过 VSIX 安装
-code --install-extension iris-linker-0.0.7.vsix
+code --install-extension iris-linker-0.0.11.vsix
 
 # 或在 VS Code 中: 扩展 → ... → 从 VSIX 安装
 ```

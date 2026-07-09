@@ -82,6 +82,19 @@ function getDocumentNameFromGitPath(gitRelativePath: string): string {
     // csp/js/css/html 保持路径格式（不以 / 开头的补上）
     return relative.startsWith('/') ? relative : '/' + relative;
 }
+
+/** 从 Git 相对路径直接计算建议导出文件名（不含 .xml 后缀） */
+function getSuggestedFileNameFromGitPath(gitRelativePath: string): string {
+    let relative = gitRelativePath.replace(/\\/g, '/');
+    const stripPrefix: string = vscode.workspace.getConfiguration('iris-linker.localExport').get('stripPrefix') || '';
+    if (stripPrefix && relative.startsWith(stripPrefix)) {
+        relative = relative.substring(stripPrefix.length);
+    }
+    const ext = path.extname(relative).toLowerCase();
+    const piece = FILE_CATEGORIES.CLASS_FILES.includes(ext) ? '.' : '_';
+    return relative.replace(/\//g, piece);
+}
+
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 
@@ -156,18 +169,33 @@ export function activate(context: vscode.ExtensionContext) {
 	const cspProvider = vscode.languages.registerDocumentLinkProvider(cspSelector,new CspResourceLinkProvider());
 	context.subscriptions.push(cspProvider);
 	// 2. 注册右键导出命令
-    const exportCommand = vscode.commands.registerCommand('iris-linker.exportToXML', async (uri: vscode.Uri) => {
+	const exportCommand = vscode.commands.registerCommand('iris-linker.exportToXML', async (arg: vscode.Uri | any) => {
         outputChannel.appendLine('=== 导出 XML 开始 ===');
         outputChannel.show(true);
 
-        // --- 处理文件 URI ---
-        if (!uri) {
+        // --- 解析传入的 URI ---
+        // 不同入口传入的参数形态不同：
+        //   - 编辑器/资源管理器/编辑器标题 右键：直接传 vscode.Uri
+        //   - 源代码管理(Git) 文件右键：传 SourceControlResourceState，
+        //     真正的文件 URI 在其 resourceUri 上
+        let uri: vscode.Uri | undefined;
+        if (arg && typeof arg === 'object' && (arg as any).resourceUri) {
+            uri = (arg as any).resourceUri;
+        } else if (arg instanceof vscode.Uri) {
+            uri = arg;
+        } else if (!arg) {
             const activeEditor = vscode.window.activeTextEditor;
-            if (!activeEditor) {
-                vscode.window.showWarningMessage('please select a file');
-                return;
+            if (activeEditor) {
+                uri = activeEditor.document.uri;
             }
-            uri = activeEditor.document.uri;
+        }
+        if (!uri) {
+            vscode.window.showWarningMessage('please select a file');
+            return;
+        }
+        // Git SCM 的 resourceUri 可能是 git: 协议，统一转成 file: 以便计算工作区相对路径与读取配置
+        if (uri.scheme === 'git') {
+            uri = uri.with({ scheme: 'file' });
         }
         outputChannel.appendLine(`[EXPORT] uri: scheme=${uri.scheme}, path=${uri.path}, fsPath=${uri.fsPath}`);
 
@@ -378,6 +406,124 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
     context.subscriptions.push(syncCommand);
+
+    // 4. 批量导出命令（Staged Changes / Changes 共用）
+    //    isStaged=true  → 暂存区文件（git diff --cached --name-only）
+    //    isStaged=false → 未暂存文件（git diff --name-only + 未跟踪文件）
+    const runBatchExport = async (isStaged: boolean) => {
+        const groupLabel = isStaged ? 'Staged Changes' : 'Changes';
+        outputChannel.appendLine(`=== 批量导出 ${groupLabel} IRIS 文件开始 ===`);
+        outputChannel.show(true);
+
+        const wsFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!wsFolder) {
+            vscode.window.showWarningMessage('没有打开的工作区');
+            return;
+        }
+        let gitRoot: string;
+        try {
+            gitRoot = getGitRoot(wsFolder.uri.fsPath);
+        } catch {
+            vscode.window.showErrorMessage('当前工作区不是 Git 仓库');
+            return;
+        }
+
+        // 读取文件列表（路径相对于 Git 根目录）
+        let allFiles: string[];
+        try {
+            if (isStaged) {
+                allFiles = cp.execSync('git diff --cached --name-only', { cwd: gitRoot, encoding: 'utf8' })
+                    .split('\n').filter(f => f.trim());
+            } else {
+                const modified = cp.execSync('git diff --name-only', { cwd: gitRoot, encoding: 'utf8' })
+                    .split('\n').filter(f => f.trim());
+                const untracked = cp.execSync('git ls-files --others --exclude-standard', { cwd: gitRoot, encoding: 'utf8' })
+                    .split('\n').filter(f => f.trim());
+                allFiles = [...modified, ...untracked];
+            }
+        } catch (e: any) {
+            vscode.window.showErrorMessage(`读取 Git ${groupLabel} 文件失败: ${e.message}`);
+            return;
+        }
+        const irisFiles = filterIRISFiles(allFiles);
+        outputChannel.appendLine(`${groupLabel} IRIS files: ${irisFiles.length}`);
+        irisFiles.forEach(f => outputChannel.appendLine(`  [${isStaged ? 'staged' : 'changes'}] ${f}`));
+
+        if (irisFiles.length === 0) {
+            vscode.window.showInformationMessage(`${groupLabel} 中没有 IRIS 支持的文件`);
+            return;
+        }
+
+        const choice = await vscode.window.showInformationMessage(
+            `${groupLabel} 中有 ${irisFiles.length} 个 IRIS 文件，选择一个目录批量导出为 XML？`,
+            { modal: true }, '选择目录', '取消'
+        );
+        if (choice !== '选择目录') {
+            return;
+        }
+
+        const dirs = await vscode.window.showOpenDialog({
+            canSelectFiles: false,
+            canSelectFolders: true,
+            canSelectMany: false,
+            openLabel: '选择导出目录',
+            defaultUri: vscode.Uri.file(require('os').homedir())
+        });
+        if (!dirs || dirs.length === 0) {
+            return;
+        }
+        const outDir = dirs[0].fsPath;
+
+        // 获取服务器配置（与同步一致：传入 workspaceFolder 读取 objectscript.conn）
+        const serverConfig = await getLocalServerConfig(outputChannel, wsFolder.uri);
+
+        let success = 0, failed = 0;
+        const failedFiles: string[] = [];
+        await vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: `导出 ${groupLabel} IRIS 文件到 XML`,
+            cancellable: true
+        }, async (progress, token) => {
+            const total = irisFiles.length;
+            for (let i = 0; i < total; i++) {
+                if (token.isCancellationRequested) { break; }
+                const file = irisFiles[i];
+                const docName = getDocumentNameFromGitPath(file);
+                const displayName = getSuggestedFileNameFromGitPath(file);
+                const outUri = vscode.Uri.joinPath(vscode.Uri.file(outDir), `${displayName}.xml`);
+                progress.report({ message: `${i + 1}/${total} - ${path.basename(file)}`, increment: 100 / total });
+                outputChannel.appendLine(`--- [${i + 1}/${total}] ${file} → docName: ${docName} ---`);
+                try {
+                    const xml = await exportToXMLContent(docName, serverConfig, outputChannel);
+                    if (!xml || xml.length === 0) {
+                        throw new Error('导出内容为空');
+                    }
+                    await vscode.workspace.fs.writeFile(outUri, Buffer.from(xml, 'utf8'));
+                    success++;
+                } catch (e: any) {
+                    failed++;
+                    failedFiles.push(`${path.basename(file)}: ${e.message}`);
+                }
+            }
+        });
+
+        let message = `导出完成: ${success} 成功, ${failed} 失败\n目录: ${outDir}`;
+        if (failedFiles.length) {
+            message += `\n失败:\n${failedFiles.map(f => '  • ' + f).join('\n')}`;
+        }
+        if (failed === 0) {
+            vscode.window.showInformationMessage(message);
+        } else {
+            vscode.window.showWarningMessage(message);
+        }
+    };
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('iris-linker.exportStagedToXML', () => runBatchExport(true))
+    );
+    context.subscriptions.push(
+        vscode.commands.registerCommand('iris-linker.exportChangesToXML', () => runBatchExport(false))
+    );
 }
 
 // This method is called when your extension is deactivated

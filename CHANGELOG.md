@@ -2,6 +2,15 @@
 
 All notable changes to the "iris-linker" extension will be documented in this file.
 
+## [0.0.11]
+
+### Added
+- 导出菜单描述改为「Export IRIS File to XML」（原 "Export File to XML"），明确标识 IRIS 导出
+- Git 源代码管理面板文件右键菜单（Changes 与 Staged Changes 组通用）新增「Export IRIS File to XML」，单击导出该文件到 XML
+- Git 面板「Staged Changes」组右键新增「Export IRIS File to XML」，一键批量将暂存区全部 IRIS 文件分别导出为独立 XML
+- Git 面板「Changes（未暂存）」组右键新增「Export IRIS File to XML」，一键批量将未暂存（含未跟踪）的 IRIS 文件分别导出为独立 XML
+- 批量导出复用 `git diff` 计算文件列表，弹窗选择目标目录后带进度条逐个导出并汇总成功/失败数
+
 ## [0.0.10]
 
 ### Added

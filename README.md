@@ -135,7 +135,7 @@ MIT
 - 在 `.csp` 文件中，`Ctrl+点击` `<script src="...">` 和 `<link href="...">` 引用，直接跳转到目标 JS/CSS 文件。
 
 **2. 右键导出到 XML**
-- 在编辑器、资源管理器或标签页标题右键点击任意支持的文件。
+- 在编辑器/资源管理器/标签页标题/Git面板增加[Export IRIS File to XML]右键。
 - 通过 **Atelier API** (`GET /api/atelier/v7/{ns}/action/xml/export/{docName}`) 导出 IRIS 服务端文档的 XML 内容。
 - 同时支持 `isfs://`（远程连接）和 `file://`（本地工作区）两种协议。
 - 支持文件类型：`.cls` `.mac` `.int` `.csp` `.js` `.css` `.html` `.png` `.jpg` `.gif` `.bmp` `.ico` `.webp` `.eot` `.otf` `.ttf` `.woff` `.woff2` `.pdf`

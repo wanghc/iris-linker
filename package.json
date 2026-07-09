@@ -3,7 +3,7 @@
   "displayName": "iris-linker",
   "publisher": "wanghc",
   "description": "InterSystems IRIS dev toolkit",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "engines": {
     "vscode": "^1.110.0"
   },
@@ -27,13 +27,21 @@
       },
       {
         "command": "iris-linker.exportToXML",
-        "title": "Export File to XML"
+        "title": "Export IRIS File to XML"
       },
       {
         "command": "iris-linker.syncAllToServer",
         "title": "Sync All to IRIS Server",
         "icon": "$(cloud-upload)",
         "category": "IRIS Linker"
+      },
+      {
+        "command": "iris-linker.exportStagedToXML",
+        "title": "Export IRIS File to XML"
+      },
+      {
+        "command": "iris-linker.exportChangesToXML",
+        "title": "Export IRIS File to XML"
       }
     ],
     "configuration": {
@@ -93,6 +101,25 @@
           "command": "iris-linker.syncAllToServer",
           "group": "navigation",
           "when": "scmProvider == git"
+        }
+      ],
+      "scm/resourceState/context": [
+        {
+          "when": "scmProvider == git && resourceExtname =~ /\\.(cls|mac|int|csp|js|css|html?|png|jpe?g|gif|bmp|ico|webp|eot|otf|ttf|woff2?|pdf)$/i",
+          "command": "iris-linker.exportToXML",
+          "group": "7_modification"
+        }
+      ],
+      "scm/resourceGroup/context": [
+        {
+          "when": "scmProvider == git && scmResourceGroup == index",
+          "command": "iris-linker.exportStagedToXML",
+          "group": "7_modification"
+        },
+        {
+          "when": "scmProvider == git && scmResourceGroup == workingTree",
+          "command": "iris-linker.exportChangesToXML",
+          "group": "7_modification"
         }
       ]
     }
